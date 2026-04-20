@@ -80,12 +80,12 @@ def main():
     y_train_reg = train_clean['safety_rating']
     X_test_reg = test_clean[base_features]
     
-    # Initialize with tuned hyperparameters
+    # Initialize with speed-optimized hyperparameters
     reg_model = LGBMRegressor(
         random_state=42, 
         n_jobs=-1,
-        n_estimators=287,
-        learning_rate=0.0309,
+        n_estimators=100,         # Dropped from 287 to save time
+        learning_rate=0.08,       # Increased from 0.0309 to compensate
         max_depth=16,
         num_leaves=34,
         subsample=0.7824,
