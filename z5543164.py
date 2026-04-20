@@ -114,7 +114,7 @@ def main():
     
     # Apply Threshold
     test_pred_probs = clf_model.predict_proba(X_test_clf)[:, 1]
-    test_clean['claim'] = (test_pred_probs >= 0.62).astype(int)
+    test_clean['claim'] = (test_pred_probs >= 0.56).astype(int)
     
     # ---------------------------------------------------------
     # EXPORT PREDICTIONS
