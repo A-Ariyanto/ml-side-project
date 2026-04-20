@@ -61,7 +61,7 @@ def main():
     train_clean = preprocess(train_df)
     test_clean = preprocess(test_df)
     
-    # 4. Robust Categorical Encoding
+    # 4. Robust Categorical Encoding (Reverting to the winning Ordinal strategy)
     cat_cols = train_clean.select_dtypes(exclude=['int32', 'float32']).columns.tolist()
     if 'policy_id' in cat_cols:
         cat_cols.remove('policy_id')
@@ -76,20 +76,21 @@ def main():
     # ---------------------------------------------------------
     # PART II: REGRESSION (Predicting safety_rating)
     # ---------------------------------------------------------
-    X_train_reg = train_clean[base_features]
-    y_train_reg = train_clean['safety_rating']
+    # EMERGENCY SPEED FIX: Train on a random 20% of the data (~8,000 rows)
+    train_reg_fast = train_clean.sample(frac=0.20, random_state=42)
+    
+    X_train_reg = train_reg_fast[base_features]
+    y_train_reg = train_reg_fast['safety_rating']
     X_test_reg = test_clean[base_features]
     
-    # Initialize with speed-optimized hyperparameters
+    # Initialize with extreme speed-optimized hyperparameters (CSE Safe)
     reg_model = LGBMRegressor(
         random_state=42, 
-        n_jobs=-1,
-        n_estimators=100,         # Dropped from 287 to save time
-        learning_rate=0.08,       # Increased from 0.0309 to compensate
-        max_depth=16,
-        num_leaves=34,
-        subsample=0.7824,
-        colsample_bytree=0.8447
+        n_jobs=1,                 
+        n_estimators=40,          
+        learning_rate=0.15,       
+        max_depth=7,              
+        num_leaves=20
     )
     
     reg_model.fit(X_train_reg, y_train_reg)
@@ -98,26 +99,35 @@ def main():
     # ---------------------------------------------------------
     # PART III: CLASSIFICATION (Predicting claim)
     # ---------------------------------------------------------
-    # Utilizing safety_rating as an additional feature
+    # Utilizing the predicted safety_rating as an additional feature
     clf_features = base_features + ['safety_rating']
-    X_train_clf = train_clean[clf_features]
-    y_train_clf = train_clean['claim']
+    
+    # EMERGENCY SPEED FIX: Train on a random 20% of the data
+    train_clf_fast = train_clean.sample(frac=0.20, random_state=42)
+    
+    X_train_clf = train_clf_fast[clf_features]
+    y_train_clf = train_clf_fast['claim']
     X_test_clf = test_clean[clf_features]
     
-    # Initialize with tuned hyperparameters
+    # Initialize with extreme speed-optimized hyperparameters (CSE Safe)
     clf_model = LGBMClassifier(
         class_weight='balanced',
         random_state=42,
-        n_jobs=-1,
-        learning_rate=0.0371,
-        max_depth=9,
-        min_child_samples=33,
-        n_estimators=316,
-        num_leaves=79
+        n_jobs=1,                 
+        n_estimators=40,          
+        learning_rate=0.15,       
+        max_depth=7,
+        num_leaves=20
     )
     
     clf_model.fit(X_train_clf, y_train_clf)
-    test_clean['claim'] = clf_model.predict(X_test_clf)
+    
+    # Get raw probabilities for the test set
+    test_pred_probs = clf_model.predict_proba(X_test_clf)[:, 1]
+    
+    # Apply the optimal threshold you found earlier
+    OPTIMAL_THRESHOLD = 0.62 
+    test_clean['claim'] = (test_pred_probs >= OPTIMAL_THRESHOLD).astype(int)
     
     # ---------------------------------------------------------
     # EXPORT PREDICTIONS
