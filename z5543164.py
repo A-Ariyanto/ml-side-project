@@ -1,12 +1,12 @@
 import sys
+import time
 import pandas as pd
 from lightgbm import LGBMRegressor, LGBMClassifier
 from sklearn.preprocessing import OrdinalEncoder
 
 def preprocess(df) -> pd.DataFrame:
     """
-    Cleans data and engineers new features. 
-    Applied separately to train and test sets to prevent target leakage.
+    Cleans data, engineers features, and aggressively downcasts data types to save RAM.
     """
     df_clean = df.copy()
     
@@ -23,19 +23,28 @@ def preprocess(df) -> pd.DataFrame:
     if 'car_age' in df_clean.columns and 'annual_mileage_km' in df_clean.columns:
         df_clean['est_total_mileage'] = df_clean['car_age'] * df_clean['annual_mileage_km']
 
-    # Handle Missing Values
+    # Handle Missing Values and Downcast to 32-bit
     num_cols = df_clean.select_dtypes(include=['int64', 'float64']).columns
     for col in num_cols:
         if col not in ['safety_rating', 'claim']: # Prevent overwriting targets if present
             df_clean[col] = df_clean[col].fillna(df_clean[col].median())
             
-    cat_cols = df_clean.select_dtypes(exclude=['int64', 'float64']).columns
+        # Downcasting
+        if df_clean[col].dtype == 'float64':
+            df_clean[col] = df_clean[col].astype('float32')
+        elif df_clean[col].dtype == 'int64':
+            df_clean[col] = df_clean[col].astype('int32')
+            
+    cat_cols = df_clean.select_dtypes(exclude=['int32', 'float32']).columns
     for col in cat_cols:
         df_clean[col] = df_clean[col].fillna('Missing')
         
     return df_clean
 
 def main():
+    # START THE TIMER
+    start_time = time.time()
+    
     # 1. Argument Parsing
     if len(sys.argv) != 3:
         print("Usage: python3 z5543164.py <train_file> <test_file>")
@@ -53,7 +62,7 @@ def main():
     test_clean = preprocess(test_df)
     
     # 4. Robust Categorical Encoding
-    cat_cols = train_clean.select_dtypes(exclude=['int64', 'float64']).columns.tolist()
+    cat_cols = train_clean.select_dtypes(exclude=['int32', 'float32']).columns.tolist()
     if 'policy_id' in cat_cols:
         cat_cols.remove('policy_id')
         
@@ -119,7 +128,12 @@ def main():
     clf_output = test_clean[['policy_id', 'claim']]
     clf_output.to_csv('z5543164_classification.csv', index=False)
     
+    # STOP THE TIMER AND PRINT
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    
     print("Predictions generated successfully.")
+    print(f"Total pipeline runtime: {elapsed_time:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
