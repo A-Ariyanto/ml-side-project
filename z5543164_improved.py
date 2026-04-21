@@ -1,19 +1,3 @@
-"""
-Improved regression + classification pipeline for Assignment 3.
-Key differences from original z5543164.py:
-  - Deep feature engineering from string columns (torque, power, car_age, features list)
-  - Binary indicators for individual safety features (critical for safety_rating prediction)
-  - Physics-based interaction features
-  - LightGBM + CatBoost ensemble for regression
-  - Better hyperparameter configuration
-
-Usage (command line):
-    python3 z5543164_improved.py train.csv test.csv
-
-Usage (Google Colab):
-    Set COLAB_MODE = True below and adjust paths.
-"""
-
 import sys
 import time
 import re
