@@ -66,26 +66,25 @@ def main():
     test_clean[cat_cols] = encoder.transform(test_clean[cat_cols])
     
     base_features = [col for col in train_clean.columns if col not in ['policy_id', 'safety_rating', 'claim']]
-    
-    # --- EMERGENCY SPEED LIMITER: Train on random 20% ---
-    train_fast = train_clean.sample(frac=0.20, random_state=42)
+
     
     # ---------------------------------------------------------
     # PART II: REGRESSION 
     # ---------------------------------------------------------
-    X_train_reg = train_fast[base_features]
-    y_train_reg = train_fast['safety_rating']
+    X_train_reg = train_clean[base_features]
+    y_train_reg = train_clean['safety_rating']
     X_test_reg = test_clean[base_features]
     
     # Double-enforced single threading (n_jobs=1 AND num_threads=1)
     reg_model = LGBMRegressor(
-        random_state=42, 
-        n_jobs=1,
-        num_threads=1, 
-        n_estimators=40,          
-        learning_rate=0.15,       
-        max_depth=7,              
-        num_leaves=20
+        random_state=42,
+        n_jobs=1,              # Maintain for server stability
+        num_threads=1,         # Maintain for server stability
+        n_estimators=1000,     # Increased significantly
+        learning_rate=0.05,    # Lower rate for better precision
+        max_depth=10,          # Deeper trees
+        num_leaves=63,         # More leaves (roughly 2^max_depth)
+        min_child_samples=20
     )
     
     reg_model.fit(X_train_reg, y_train_reg)
@@ -95,8 +94,8 @@ def main():
     # PART III: CLASSIFICATION 
     # ---------------------------------------------------------
     clf_features = base_features + ['safety_rating']
-    X_train_clf = train_fast[clf_features]
-    y_train_clf = train_fast['claim']
+    X_train_clf = train_clean[clf_features]
+    y_train_clf = train_clean['claim']
     X_test_clf = test_clean[clf_features]
     
     clf_model = LGBMClassifier(
