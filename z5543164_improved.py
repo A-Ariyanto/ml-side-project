@@ -212,9 +212,9 @@ def main():
     # PART II: REGRESSION — 4-model ensemble for safety_rating
     # Allocated ~85s of budget here (accuracy matters most)
     # =============================================================
-    X_train_reg = train_clean[base_features].values
-    y_train_reg = train_clean['safety_rating'].values
-    X_test_reg = test_clean[base_features].values
+    X_train_reg = train_clean[base_features]
+    y_train_reg = train_clean['safety_rating']
+    X_test_reg = test_clean[base_features]
 
     # ── Model 1: LightGBM (deep, many leaves) ──
     lgbm_reg_1 = LGBMRegressor(
@@ -297,9 +297,9 @@ def main():
     # Allocated ~25s of budget here
     # =============================================================
     clf_features = base_features + ['safety_rating']
-    X_train_clf = train_clean[clf_features].values
-    y_train_clf = train_clean['claim'].values
-    X_test_clf = test_clean[clf_features].values
+    X_train_clf = train_clean[clf_features]
+    y_train_clf = train_clean['claim']
+    X_test_clf = test_clean[clf_features]
 
     # ── Model 1: LightGBM Classifier ──
     lgbm_clf = LGBMClassifier(
