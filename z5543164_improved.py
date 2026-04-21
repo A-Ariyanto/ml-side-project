@@ -135,6 +135,28 @@ def preprocess(df) -> pd.DataFrame:
     if has_cols:
         df_clean['total_safety_score'] = df_clean[has_cols].sum(axis=1)
 
+    # ── 8. Squared / log features for non-linear signal ──
+    if 'airbags' in df_clean.columns:
+        df_clean['airbags_sq'] = df_clean['airbags'] ** 2
+
+    if 'n_features' in df_clean.columns:
+        df_clean['n_features_sq'] = df_clean['n_features'] ** 2
+
+    if 'power_bhp' in df_clean.columns:
+        df_clean['log_power'] = np.log1p(df_clean['power_bhp'].clip(lower=0))
+
+    if 'gross_weight' in df_clean.columns:
+        df_clean['log_weight'] = np.log1p(df_clean['gross_weight'].clip(lower=0))
+
+    if 'displacement' in df_clean.columns:
+        df_clean['log_displacement'] = np.log1p(df_clean['displacement'].clip(lower=0))
+
+    if 'annual_mileage_km' in df_clean.columns:
+        df_clean['log_mileage'] = np.log1p(df_clean['annual_mileage_km'].clip(lower=0))
+
+    if 'population_density' in df_clean.columns:
+        df_clean['log_pop_density'] = np.log1p(df_clean['population_density'].clip(lower=0))
+
     return df_clean
 
 
@@ -187,16 +209,17 @@ def main():
     ]
 
     # =============================================================
-    # PART II: REGRESSION — 3-model ensemble for safety_rating
+    # PART II: REGRESSION — 4-model ensemble for safety_rating
+    # Allocated ~85s of budget here (accuracy matters most)
     # =============================================================
     X_train_reg = train_clean[base_features].values
     y_train_reg = train_clean['safety_rating'].values
     X_test_reg = test_clean[base_features].values
 
-    # ── Model 1: LightGBM ──
-    lgbm_reg = LGBMRegressor(
-        n_estimators=2000,
-        learning_rate=0.03,
+    # ── Model 1: LightGBM (deep, many leaves) ──
+    lgbm_reg_1 = LGBMRegressor(
+        n_estimators=5000,
+        learning_rate=0.01,
         max_depth=-1,
         num_leaves=127,
         min_child_samples=10,
@@ -207,14 +230,32 @@ def main():
         random_state=42,
         verbose=-1
     )
-    lgbm_reg.fit(X_train_reg, y_train_reg)
-    pred_lgbm_reg = lgbm_reg.predict(X_test_reg)
-    print(f"  LightGBM reg done  — {time.time() - start_time:.1f}s")
+    lgbm_reg_1.fit(X_train_reg, y_train_reg)
+    pred_lgbm_1 = lgbm_reg_1.predict(X_test_reg)
+    print(f"  LGBM reg v1 done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 2: XGBoost ──
+    # ── Model 2: LightGBM (wider trees, different structure for diversity) ──
+    lgbm_reg_2 = LGBMRegressor(
+        n_estimators=4000,
+        learning_rate=0.015,
+        max_depth=-1,
+        num_leaves=255,
+        min_child_samples=5,
+        subsample=0.7,
+        colsample_bytree=0.7,
+        reg_alpha=0.05,
+        reg_lambda=0.5,
+        random_state=123,
+        verbose=-1
+    )
+    lgbm_reg_2.fit(X_train_reg, y_train_reg)
+    pred_lgbm_2 = lgbm_reg_2.predict(X_test_reg)
+    print(f"  LGBM reg v2 done   — {time.time() - start_time:.1f}s")
+
+    # ── Model 3: XGBoost ──
     xgb_reg = XGBRegressor(
-        n_estimators=1500,
-        learning_rate=0.03,
+        n_estimators=4000,
+        learning_rate=0.01,
         max_depth=8,
         min_child_weight=5,
         subsample=0.8,
@@ -229,10 +270,10 @@ def main():
     pred_xgb_reg = xgb_reg.predict(X_test_reg)
     print(f"  XGBoost reg done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 3: sklearn HistGradientBoosting ──
+    # ── Model 4: sklearn HistGradientBoosting ──
     hgb_reg = HistGradientBoostingRegressor(
-        max_iter=1500,
-        learning_rate=0.03,
+        max_iter=4000,
+        learning_rate=0.01,
         max_depth=8,
         max_leaf_nodes=127,
         min_samples_leaf=10,
@@ -245,13 +286,15 @@ def main():
 
     # ── Ensemble: weighted average ──
     test_clean['safety_rating'] = (
-        0.40 * pred_lgbm_reg +
-        0.35 * pred_xgb_reg +
-        0.25 * pred_hgb_reg
+        0.30 * pred_lgbm_1 +
+        0.25 * pred_lgbm_2 +
+        0.25 * pred_xgb_reg +
+        0.20 * pred_hgb_reg
     )
 
     # =============================================================
     # PART III: CLASSIFICATION — 3-model ensemble for claim
+    # Allocated ~25s of budget here
     # =============================================================
     clf_features = base_features + ['safety_rating']
     X_train_clf = train_clean[clf_features].values
@@ -261,8 +304,8 @@ def main():
     # ── Model 1: LightGBM Classifier ──
     lgbm_clf = LGBMClassifier(
         class_weight='balanced',
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=1500,
+        learning_rate=0.02,
         max_depth=-1,
         num_leaves=63,
         min_child_samples=20,
@@ -282,8 +325,8 @@ def main():
 
     xgb_clf = XGBClassifier(
         scale_pos_weight=scale_pos,
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=1500,
+        learning_rate=0.02,
         max_depth=7,
         min_child_weight=5,
         subsample=0.8,
@@ -299,8 +342,8 @@ def main():
     # ── Model 3: sklearn HistGradientBoosting Classifier ──
     hgb_clf = HistGradientBoostingClassifier(
         class_weight='balanced',
-        max_iter=500,
-        learning_rate=0.05,
+        max_iter=1500,
+        learning_rate=0.02,
         max_depth=7,
         max_leaf_nodes=63,
         min_samples_leaf=20,
