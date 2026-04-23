@@ -199,7 +199,6 @@ def main():
     ]
 
     # PART II: REGRESSION — 4-model ensemble for safety_rating
-    # Allocated ~70s of budget here
     X_train_reg = train_clean[base_features]
     y_train_reg = train_clean['safety_rating']
     X_test_reg = test_clean[base_features]
