@@ -10,7 +10,6 @@ from sklearn.preprocessing import OrdinalEncoder
 
 STUDENT_ID = "z5543164"
 
-# Key safety-related features found in the 'features' column
 SAFETY_FEATURES = [
     'esc', 'tpms', 'brake_assist', 'parking_camera',
     'parking_sensors', 'front_fog_lights', 'adjustable_steering',
@@ -23,11 +22,10 @@ SAFETY_FEATURES = [
 def preprocess(df) -> pd.DataFrame:
     """
     Rich feature engineering applied independently to train and test.
-    NO target information is used — no data leakage.
+    NO target information is used which means there is no data leakage.
     """
     df_clean = df.copy()
 
-    # ── 1. Parse torque: "91Nm@4250rpm" → torque_nm, torque_rpm ──
     if 'torque' in df_clean.columns:
         torque_str = df_clean['torque'].astype(str)
         df_clean['torque_nm'] = pd.to_numeric(
@@ -40,7 +38,6 @@ def preprocess(df) -> pd.DataFrame:
         )
         df_clean.drop(columns=['torque'], inplace=True)
 
-    # ── 2. Parse power: "67.06bhp@5500rpm" → power_bhp, power_rpm ──
     if 'power' in df_clean.columns:
         power_str = df_clean['power'].astype(str)
         df_clean['power_bhp'] = pd.to_numeric(
@@ -53,7 +50,6 @@ def preprocess(df) -> pd.DataFrame:
         )
         df_clean.drop(columns=['power'], inplace=True)
 
-    # ── 3. Parse car_age: "4 years and 6 months" → months ──
     if 'car_age' in df_clean.columns:
         age_str = df_clean['car_age'].astype(str)
         years = pd.to_numeric(
@@ -65,7 +61,6 @@ def preprocess(df) -> pd.DataFrame:
         df_clean['car_age_months'] = (years * 12 + months).astype(int)
         df_clean.drop(columns=['car_age'], inplace=True)
 
-    # ── 4. Parse features list → count + binary indicators ──
     if 'features' in df_clean.columns:
         feat_str = df_clean['features'].astype(str)
         df_clean['n_features'] = feat_str.str.count("'") // 2
@@ -75,14 +70,12 @@ def preprocess(df) -> pd.DataFrame:
             ).astype(int)
         df_clean.drop(columns=['features'], inplace=True)
 
-    # ── 5. Parse gross_weight to numeric ──
     if 'gross_weight' in df_clean.columns:
         df_clean['gross_weight'] = pd.to_numeric(
             df_clean['gross_weight'].astype(str).str.replace(r'[^\d.]', '', regex=True),
             errors='coerce'
         )
 
-    # ── 6. Physics-based interaction features ──
     if 'power_bhp' in df_clean.columns and 'gross_weight' in df_clean.columns:
         gw_safe = df_clean['gross_weight'].replace(0, np.nan)
         df_clean['power_to_weight'] = df_clean['power_bhp'] / gw_safe
@@ -106,7 +99,6 @@ def preprocess(df) -> pd.DataFrame:
             df_clean['car_age_months'] * df_clean['annual_mileage_km'] / 12.0
         )
 
-    # ── 7. Additional interaction features ──
     if 'policyholder_age' in df_clean.columns and 'car_age_months' in df_clean.columns:
         df_clean['driver_car_age_ratio'] = (
             df_clean['policyholder_age'] / df_clean['car_age_months'].replace(0, np.nan)
@@ -130,12 +122,10 @@ def preprocess(df) -> pd.DataFrame:
             df_clean['turning_radius'] / df_clean['length'].replace(0, np.nan)
         )
 
-    # Sum of all binary safety features
     has_cols = [c for c in df_clean.columns if c.startswith('has_')]
     if has_cols:
         df_clean['total_safety_score'] = df_clean[has_cols].sum(axis=1)
 
-    # ── 8. Squared / log features for non-linear signal ──
     if 'airbags' in df_clean.columns:
         df_clean['airbags_sq'] = df_clean['airbags'] ** 2
 
@@ -169,15 +159,15 @@ def main():
     train_path = sys.argv[1]
     test_path = sys.argv[2]
 
-    # ── Load data ──
+    # Load data
     train_df = pd.read_csv(train_path)
     test_df = pd.read_csv(test_path)
 
-    # ── Feature engineering ──
+    # Feature engineering
     train_clean = preprocess(train_df)
     test_clean = preprocess(test_df)
 
-    # ── Missing value imputation (use training medians only) ──
+    # Missing value imputation (use training medians only)
     exclude_targets = ['safety_rating', 'claim', 'policy_id']
     num_cols = [
         c for c in train_clean.select_dtypes(include=['number']).columns
@@ -195,7 +185,7 @@ def main():
         train_clean[cat_cols] = train_clean[cat_cols].fillna('Missing')
         test_clean[cat_cols] = test_clean[cat_cols].fillna('Missing')
 
-    # ── Categorical encoding ──
+    # Categorical encoding
     if cat_cols:
         encoder = OrdinalEncoder(
             handle_unknown='use_encoded_value', unknown_value=-1
@@ -208,15 +198,12 @@ def main():
         if c not in ['policy_id', 'safety_rating', 'claim']
     ]
 
-    # =============================================================
     # PART II: REGRESSION — 4-model ensemble for safety_rating
-    # Allocated ~85s of budget here (accuracy matters most)
-    # =============================================================
     X_train_reg = train_clean[base_features]
     y_train_reg = train_clean['safety_rating']
     X_test_reg = test_clean[base_features]
 
-    # ── Model 1: LightGBM (deep, many leaves) ──
+    # Model 1: LightGBM (deep, many leaves)
     lgbm_reg_1 = LGBMRegressor(
         n_estimators=5000,
         learning_rate=0.01,
@@ -234,7 +221,7 @@ def main():
     pred_lgbm_1 = lgbm_reg_1.predict(X_test_reg)
     print(f"  LGBM reg v1 done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 2: LightGBM (wider trees, different structure for diversity) ──
+    # Model 2: LightGBM (wider trees, different structure for diversity)
     lgbm_reg_2 = LGBMRegressor(
         n_estimators=4000,
         learning_rate=0.015,
@@ -252,7 +239,7 @@ def main():
     pred_lgbm_2 = lgbm_reg_2.predict(X_test_reg)
     print(f"  LGBM reg v2 done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 3: XGBoost ──
+    # Model 3: XGBoost
     xgb_reg = XGBRegressor(
         n_estimators=4000,
         learning_rate=0.01,
@@ -270,7 +257,7 @@ def main():
     pred_xgb_reg = xgb_reg.predict(X_test_reg)
     print(f"  XGBoost reg done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 4: sklearn HistGradientBoosting ──
+    # Model 4: sklearn HistGradientBoosting
     hgb_reg = HistGradientBoostingRegressor(
         max_iter=4000,
         learning_rate=0.01,
@@ -284,7 +271,7 @@ def main():
     pred_hgb_reg = hgb_reg.predict(X_test_reg)
     print(f"  HistGBR reg done   — {time.time() - start_time:.1f}s")
 
-    # ── Ensemble: weighted average ──
+    # Ensemble: weighted average
     test_clean['safety_rating'] = (
         0.30 * pred_lgbm_1 +
         0.25 * pred_lgbm_2 +
@@ -292,16 +279,13 @@ def main():
         0.20 * pred_hgb_reg
     )
 
-    # =============================================================
     # PART III: CLASSIFICATION — 3-model ensemble for claim
-    # Allocated ~25s of budget here
-    # =============================================================
     clf_features = base_features + ['safety_rating']
     X_train_clf = train_clean[clf_features]
     y_train_clf = train_clean['claim']
     X_test_clf = test_clean[clf_features]
 
-    # ── Model 1: LightGBM Classifier ──
+    # Model 1: LightGBM Classifier
     lgbm_clf = LGBMClassifier(
         class_weight='balanced',
         n_estimators=1500,
@@ -318,7 +302,7 @@ def main():
     prob_lgbm_clf = lgbm_clf.predict_proba(X_test_clf)[:, 1]
     print(f"  LightGBM clf done  — {time.time() - start_time:.1f}s")
 
-    # ── Model 2: XGBoost Classifier ──
+    # Model 2: XGBoost Classifier
     n_neg = (y_train_clf == 0).sum()
     n_pos = (y_train_clf == 1).sum()
     scale_pos = n_neg / max(n_pos, 1)
@@ -339,7 +323,7 @@ def main():
     prob_xgb_clf = xgb_clf.predict_proba(X_test_clf)[:, 1]
     print(f"  XGBoost clf done   — {time.time() - start_time:.1f}s")
 
-    # ── Model 3: sklearn HistGradientBoosting Classifier ──
+    # Model 3: sklearn HistGradientBoosting Classifier
     hgb_clf = HistGradientBoostingClassifier(
         class_weight='balanced',
         max_iter=1500,
@@ -354,13 +338,11 @@ def main():
     prob_hgb_clf = hgb_clf.predict_proba(X_test_clf)[:, 1]
     print(f"  HistGBC clf done   — {time.time() - start_time:.1f}s")
 
-    # ── Ensemble: average probabilities, then threshold ──
+    # Ensemble: average probabilities, then threshold
     avg_prob = (prob_lgbm_clf + prob_xgb_clf + prob_hgb_clf) / 3.0
     test_clean['claim'] = (avg_prob >= 0.5).astype(int)
 
-    # =============================================================
     # EXPORT PREDICTIONS
-    # =============================================================
     reg_out = f"{STUDENT_ID}_regression.csv"
     clf_out = f"{STUDENT_ID}_classification.csv"
     test_clean[['policy_id', 'safety_rating']].to_csv(reg_out, index=False)
