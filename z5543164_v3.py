@@ -199,15 +199,14 @@ def main():
     ]
 
     # PART II: REGRESSION — 4-model ensemble for safety_rating
-    # Allocated ~70s of budget here
     X_train_reg = train_clean[base_features]
     y_train_reg = train_clean['safety_rating']
     X_test_reg = test_clean[base_features]
 
     # Model 1: LightGBM (deep, many leaves)
     lgbm_reg_1 = LGBMRegressor(
-        n_estimators=1000,
-        learning_rate=0.05,
+        n_estimators=5000,
+        learning_rate=0.01,
         max_depth=-1,
         num_leaves=127,
         min_child_samples=10,
@@ -224,8 +223,8 @@ def main():
 
     # Model 2: LightGBM (wider trees, different structure for diversity)
     lgbm_reg_2 = LGBMRegressor(
-        n_estimators=800,
-        learning_rate=0.05,
+        n_estimators=4000,
+        learning_rate=0.015,
         max_depth=-1,
         num_leaves=255,
         min_child_samples=5,
@@ -242,8 +241,8 @@ def main():
 
     # Model 3: XGBoost
     xgb_reg = XGBRegressor(
-        n_estimators=800,
-        learning_rate=0.05,
+        n_estimators=4000,
+        learning_rate=0.01,
         max_depth=8,
         min_child_weight=5,
         subsample=0.8,
@@ -260,8 +259,8 @@ def main():
 
     # Model 4: sklearn HistGradientBoosting
     hgb_reg = HistGradientBoostingRegressor(
-        max_iter=1500,
-        learning_rate=0.03,
+        max_iter=4000,
+        learning_rate=0.01,
         max_depth=8,
         max_leaf_nodes=127,
         min_samples_leaf=10,
@@ -289,8 +288,8 @@ def main():
     # Model 1: LightGBM Classifier
     lgbm_clf = LGBMClassifier(
         class_weight='balanced',
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=1500,
+        learning_rate=0.02,
         max_depth=-1,
         num_leaves=63,
         min_child_samples=20,
@@ -310,8 +309,8 @@ def main():
 
     xgb_clf = XGBClassifier(
         scale_pos_weight=scale_pos,
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=1500,
+        learning_rate=0.02,
         max_depth=7,
         min_child_weight=5,
         subsample=0.8,
@@ -327,8 +326,8 @@ def main():
     # Model 3: sklearn HistGradientBoosting Classifier
     hgb_clf = HistGradientBoostingClassifier(
         class_weight='balanced',
-        max_iter=500,
-        learning_rate=0.05,
+        max_iter=1500,
+        learning_rate=0.02,
         max_depth=7,
         max_leaf_nodes=63,
         min_samples_leaf=20,
