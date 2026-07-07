@@ -1,4 +1,6 @@
-N# Vehicle Insurance Risk Modelling
+# Vehicle Insurance Risk Modelling
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/A-Ariyanto/ml-side-project/blob/main/analysis.ipynb)
 
 An end-to-end machine learning pipeline that predicts two targets from vehicle insurance policy data:
 
@@ -19,12 +21,16 @@ Built with pandas, scikit-learn, LightGBM and XGBoost. The full pipeline (featur
 
 ## Quick start
 
+Everything runs on CPU — no GPU required. The notebook can also be opened directly in Google Colab via the badge above.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python3 predict.py data/train.csv data/test.csv
 ```
+
+> **macOS note:** LightGBM needs the OpenMP runtime — install it once with `brew install libomp`.
 
 This trains everything from scratch and writes two files: `predictions_regression.csv` (`policy_id, safety_rating`) and `predictions_classification.csv` (`policy_id, claim`).
 
